@@ -1,0 +1,139 @@
+{
+  "name": "isight",
+  "type": "flogo:app",
+  "version": "0.0.1",
+  "appModel": "1.1.0",
+  "description": "Insights for improwised",
+  "imports": [
+    "github.com/project-flogo/contrib/trigger/rest",
+    "github.com/project-flogo/flow",
+    "github.com/project-flogo/contrib/activity/log",
+    "github.com/project-flogo/contrib/trigger/timer",
+    "github.com/Improwised/isight/flogo/erp-station/fetch-and-insert-employee@main",
+    "github.com/Improwised/isight/flogo/spreadsheet/get-expense-details@fetch-employee-details"
+  ],
+  "triggers": [
+    {
+      "id": "receive_employee_id",
+      "ref": "github.com/project-flogo/contrib/trigger/rest",
+      "name": "Receive employee id from erp-station",
+      "description": "Simple REST Trigger",
+      "settings": {
+        "port": 9233
+      },
+      "handlers": [
+        {
+          "settings": {
+            "method": "POST",
+            "path": "/"
+          },
+          "action": {
+            "ref": "github.com/project-flogo/flow",
+            "settings": {
+              "flowURI": "res://flow:get_employee_data"
+            },
+            "input": {
+              "empID": "=$.content"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "receive_expense_data_from_gsheet",
+      "ref": "github.com/project-flogo/contrib/trigger/timer",
+      "name": "Receive expense data from google sheet",
+      "description": "Simple Time Trigger",
+      "handlers": [
+        {
+          "settings": {
+            "repeatInterval": "=$env[EXPENSETRIGERTIME]"
+          },
+          "action": {
+            "ref": "github.com/project-flogo/flow",
+            "settings": {
+              "flowURI": "res://flow:get_expense_data"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "id": "flow:get_employee_data",
+      "data": {
+        "name": "employeeDetails",
+        "metadata": {
+          "input": [
+            {
+              "name": "empID",
+              "type": "string"
+            }
+          ]
+        },
+        "tasks": [
+          {
+            "id": "update_3",
+            "name": "update",
+            "description": "Logs a message",
+            "activity": {
+              "ref": "github.com/Improwised/isight/flogo/erp-station/fetch-and-insert-employee",
+              "input": {
+                "addDetails": false,
+                "usePrint": false,
+                "employeeId": "=$flow.empID",
+                "dbUrl":"=$env[DBURL]",
+                "erpKey":"=$env[ERPKEY]",
+                "erpToken":"=$env[ERPTOKEN]",
+                "erpUrl":"=$env[ERPURL]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "flow:get_expense_data",
+      "data": {
+        "name": "expenseDetails",
+        "tasks": [
+          {
+            "id": "changeExpense",
+            "name": "changeExpense",
+            "description": "Changing Expense Details",
+            "activity": {
+              "ref": "github.com/Improwised/isight/flogo/spreadsheet/get-expense-details",
+              "input": {
+                "addDetails": false,
+                "usePrint": false,
+                "dbUrl":"=$env[DBURL]",
+                "erpKey":"=$env[ERPKEY]",
+                "erpToken":"=$env[ERPTOKEN]",
+                "erpUrl":"=$env[ERPURL]"
+              }
+            }
+          },
+          {
+            "id": "expenseLog",
+            "name": "Log",
+            "description": "expense details triggered",
+            "activity": {
+              "ref": "github.com/project-flogo/contrib/activity/log",
+              "input": {
+                "addDetails": false,
+                "message": "expense details triggered"
+              }
+            }
+          }
+        ],
+        "links": [
+          {
+            "from": "changeExpense",
+            "to": "expenseLog"
+          }
+        ]
+      }
+    }
+  ]
+}
